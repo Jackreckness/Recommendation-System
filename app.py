@@ -5,9 +5,8 @@ import pandas as pd
 
 books = utils.readBooks()
 ratings = utils.readRatings()
-books.set_index("Book.Id", drop=False, inplace=True)
-myuserId = 262151
-feedback_userId = 262151
+books.set_index("BookId", drop=False, inplace=True)
+myuserId = 0
 
 
 def PrintBook(Title, ISBN, BookId, Author, Year, Publisher, Image):
@@ -25,7 +24,7 @@ def PrintBook(Title, ISBN, BookId, Author, Year, Publisher, Image):
         """
         st.markdown(markdown, unsafe_allow_html=True)
         if st.button("Not interested", key="recommend_btn_" + str(BookId)):
-            utils.addFeedback(feedback_userId, BookId, 1)
+            utils.addFeedback(myuserId, BookId)
             st.info("Book '" + Title + "'  is added to my dislike list")
         st.write("---")
 
@@ -33,10 +32,20 @@ def PrintBook(Title, ISBN, BookId, Author, Year, Publisher, Image):
 def Recommendation():
     st.header("Optimized recommendation system")
 
-    if st.button("Generate recommendation"):
-        bookIds = utils.get_top_n_recommendations(myuserId, feedback_userId, 5)
-        print(bookIds)
-        st.session_state["top5"] = bookIds
+    col1, col2 = st.columns([2, 2])
+    with col1:
+        if st.button("Generate recommendation"):
+            timespan = st.session_state.get("timespan", "recent 2 weeks")
+            bookIds = utils.get_top_n_recommendations(myuserId, 5, timespan=timespan)
+            print(bookIds)
+            st.session_state["top5"] = bookIds
+    
+    with col2:
+        timespan = st.select_slider(
+            "Select timespan to filter the data used to make prediction:",
+            options=["short term", "3 months", "6 months", "this year", "long term"],
+            key="timespan"
+        )
 
     if "top5" in st.session_state:
         for book_id in st.session_state["top5"]:
@@ -59,7 +68,7 @@ def Books():
         PrintBook(
             row["Book.Title"],
             row["ISBN"],
-            row["Book.Id"],
+            row["BookId"],
             row["Book.Author"],
             row["Year.Of.Publication"],
             row["Publisher"],
@@ -68,36 +77,30 @@ def Books():
         st.write("---")
 
 
-def MyFeedbacks():
-    st.title("My Feedbacks")
-    df = utils.readFeedback()
-    edited_df = st.data_editor(df, num_rows="dynamic")
-    if st.button("Update"):
-        edited_df.to_csv("feedback.csv", index=False)
 
 def MyRatings():
     st.title("My Ratings")
     df = utils.readRatings()
-    edited_df = st.data_editor(df)
+    df_filtered = df[df["UserId"] == myuserId]
+    edited_df = st.data_editor(df_filtered)
     if st.button("Update"):
-        edited_df.to_csv("filtered_ratings.csv", index=False)
+        df_notmy = df[df["UserId"] != myuserId]
+        df = pd.concat([edited_df, df_notmy], ignore_index=True)
+        df.to_csv("data/filtered_ratings.csv", index=False)
+
 
 def main():
     with st.sidebar:
         st.header("Select the page")
     page = st.sidebar.radio(
-        "", ["Recommendation", "My Ratings", "My Feedbacks", "All Books"]
+        "", ["Recommendation", "My Ratings", "All Books"]
     )
     if page == "Recommendation":
         Recommendation()
     elif page == "My Ratings":
         MyRatings()
-    elif page == "My Feedbacks":
-        MyFeedbacks()
     elif page == "All Books":
         Books()
-    else:
-        Test()
 
 
 if __name__ == "__main__":
