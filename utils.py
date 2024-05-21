@@ -1,24 +1,44 @@
 import pandas as pd
 import numpy as np
-from surprise import Reader
-from surprise import Dataset
-from surprise import SVD
+from surprise import Reader, Dataset, SVD
 from datetime import datetime, timedelta
 
-# Function to read the ratings data
+# Constants for file paths
+RATINGS_FILE_PATH = "data/filtered_ratings.csv"
+BOOKS_FILE_PATH = "data/filtered_books.csv"
+
 def readRatings():
-    path = "data/filtered_ratings.csv"
-    data = pd.read_csv(path)
+    """
+    Read the ratings data from a CSV file.
+    
+    Returns:
+        DataFrame: A pandas DataFrame containing the ratings data.
+    """
+    data = pd.read_csv(RATINGS_FILE_PATH)
     return data
 
-# Function to read the books data
 def readBooks():
-    path = "data/filtered_books.csv"
-    data = pd.read_csv(path)
+    """
+    Read the books data from a CSV file.
+    
+    Returns:
+        DataFrame: A pandas DataFrame containing the books data.
+    """
+    data = pd.read_csv(BOOKS_FILE_PATH)
     return data
 
-# Function to re-fit a SVD model and return the top n recommendations for a user
 def get_top_n_recommendations(user_id, n=5, timespan='long term'):
+    """
+    Fit a SVD model and return the top n recommendations for a user based on the selected timespan.
+    
+    Args:
+        user_id (int): The ID of the user for whom recommendations are to be generated.
+        n (int): The number of top recommendations to return. Default is 5.
+        timespan (str): The timespan to filter the ratings data. Options are 'recent 2 weeks', '3 months', '6 months', 'this year', 'long term'.
+    
+    Returns:
+        list: A list of book IDs recommended for the user.
+    """
     df = readRatings()
 
     # Define the time filtering logic
@@ -38,21 +58,26 @@ def get_top_n_recommendations(user_id, n=5, timespan='long term'):
     df['RatingDate'] = pd.to_datetime(df['RatingDate'])
     df = df[df['RatingDate'] >= start_date]
 
-    reader = Reader(rating_scale = (0, 10))
+    # Load data into Surprise dataset format
+    reader = Reader(rating_scale=(0, 10))
     data = Dataset.load_from_df(df[['UserId', 'BookId', 'Rating']], reader)
     trainset = data.build_full_trainset()
     
-    # the best parameters using grid search: {'n_epochs': 10, 'lr_all': 0.01, 'reg_all': 0.4}
-    # more detals in the notebook: recommendation.ipynb
+    # Fit the SVD model
     model_svd = SVD()
     model_svd.fit(trainset)
+    
+    # Get the list of books not rated by the user
     user_books = df[df['UserId'] == user_id]['BookId'].unique()
     all_books = df['BookId'].unique()
     books_to_predict = list(set(all_books) - set(user_books))
+    
+    # Predict ratings for the books not rated by the user
     user_book_pairs = [(user_id, book_id, 0) for book_id in books_to_predict]
     predictions_cf = model_svd.test(user_book_pairs)
-    top_n_recommendations = sorted(predictions_cf, key = lambda x: x.est, reverse = True)[:n]
+    top_n_recommendations = sorted(predictions_cf, key=lambda x: x.est, reverse=True)[:n]
     
+    # Print predicted ratings for debugging
     for pred in top_n_recommendations:
         predicted_rating = pred.est
         print(predicted_rating)
@@ -62,13 +87,24 @@ def get_top_n_recommendations(user_id, n=5, timespan='long term'):
     return top_n_book_ids
 
 def addFeedback(userId, bookId):
+    """
+    Add feedback for a book by marking it as not interested.
+    
+    Args:
+        userId (int): The ID of the user providing feedback.
+        bookId (int): The ID of the book to be marked as not interested.
+    
+    Updates:
+        The ratings CSV file by adding a new row with the user's feedback.
+    """
     # Load the existing ratings data
-    df = pd.read_csv('data/filtered_ratings.csv')
+    df = pd.read_csv(RATINGS_FILE_PATH)
     
     # Get today's date
     today_date = datetime.now().strftime('%Y-%m-%d')
     new_row = {'UserId': userId, 'BookId': bookId, 'Rating': 1, 'RatingDate': today_date}
-     # Convert new_row to DataFrame and concatenate it with the existing DataFrame
+    
+    # Convert new_row to DataFrame and concatenate it with the existing DataFrame
     new_row_df = pd.DataFrame([new_row])
     df = pd.concat([df, new_row_df], ignore_index=True)
-    df.to_csv('data/filtered_ratings.csv', index=False)
+    df.to_csv(RATINGS_FILE_PATH, index=False)
