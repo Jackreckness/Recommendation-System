@@ -29,6 +29,9 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
+3. Jupyter notebook script
+find the key implementations in the recommendation.ipynb file.  
+
 ## Usage
 
 ### Recommendation Page
