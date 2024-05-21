@@ -1,2 +1,0 @@
-# optimizedsvd
-Optimized SVD
